@@ -5,6 +5,7 @@ import json
 import webbrowser
 from collections import OrderedDict
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 # Replace dict: {Original term: Replace term}
 #  Note for defaults:
@@ -19,6 +20,7 @@ DEFAULT_CONFIG_DATA = {
                        {'Double-click this passage to edit it.': 'pass'}],
     # 'custom_replace': [{'“': '\"'}, {'”': '\"'}, {'’': '\\\''}, {'Double-click this passage to edit it.': 'pass'}],
     'twine_mode': 0,
+    'nvl_mode': False,
     'start_name': 'start',
     'doc_break': 'doc_break',
     'char_def': True,
@@ -56,7 +58,7 @@ def digit_to_string(string):
         (str): Written out version of the digit
     """
     # Iterate over the list of characters to update
-    for og_char, new_char in DIGIT_TO_STR_DICT.iteritems():
+    for og_char, new_char in DIGIT_TO_STR_DICT.items():
         string = string.replace(og_char, new_char)
     return string
 
@@ -101,8 +103,7 @@ def strip_quotes(choice_text):
 class TwineToRenpy:
     def __init__(self):
         # Get the config path by getting current directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.config_path = os.path.join(current_dir, 'config.json')
+        self.config_path = str(Path.cwd() / 'config.json')
 
         # Check if the config json exists
         if os.path.exists(self.config_path):
@@ -192,7 +193,7 @@ class TwineToRenpy:
         new_name = ''
         for char_index, char in enumerate(name):
             # Check if the first character is a number
-            if char_index is 1:
+            if char_index == 1:
                 # If so, either change the digit to a string
                 #  or add a string in front of the label
                 if char.isdigit():
@@ -203,6 +204,7 @@ class TwineToRenpy:
                 else:
                     new_name += char
             else:
+                # TODO Double check this works with '
                 # Check if the current character is alphanumeric or _ which is acceptable
                 if char.isalnum() or char == '_':
                     new_name += char
@@ -245,7 +247,7 @@ class TwineToRenpy:
         self.write_config()
 
         # Open the HTML file as a soup
-        with open(self.data['html_path'], 'r') as html_file:
+        with open(self.data['html_path'], 'r', encoding='utf-8') as html_file:
             soup = BeautifulSoup(html_file, 'html.parser')
 
         # Get the list of passages
@@ -275,7 +277,9 @@ class TwineToRenpy:
                 passage_list.append(passage)
 
                 # Convert passage from ascii to unicode
-                unicode_passage = passage.string.encode('utf-8')
+                # TODO Remove: Converting to unicode no longer necessary since done on file open
+                # unicode_passage = passage.string.encode('utf-8')
+                unicode_passage = passage.string
 
                 # Get list of characters if asked to generate
                 if self.get_config_value('char_def'):
@@ -301,10 +305,17 @@ class TwineToRenpy:
                             set_passage_split_list = set_passage_split.split('>>', 1)
                             # This is our set statement
                             set_passage_statement = set_passage_split_list[0]
-                            # Split out the variable name and the value
-                            variable_name, variable_value = set_passage_statement.split(' to ')
+                            # Figure out which assignment operator we're using
+                            assignment_operator_list = [' to ', '=']
+                            variable_name, variable_value = 'assignment_op_not_found', 'None'
+                            for assignment_operator in assignment_operator_list:
+                                if assignment_operator in set_passage_statement:
+                                    # Split out the variable name and the value statement at first encounter
+                                    variable_name, variable_value = set_passage_statement.split(
+                                        assignment_operator, 1)
+                                    break
                             # Replace Twine boolean phrase with the Ren'Py/Python accepted one
-                            for boolean_phrase, boolean_replace in boolean_replace_dict.iteritems():
+                            for boolean_phrase, boolean_replace in boolean_replace_dict.items():
                                 if boolean_phrase in set_passage_statement:
                                     variable_value = set_passage_statement.replace(boolean_phrase,
                                                                                    boolean_replace)
@@ -334,7 +345,7 @@ class TwineToRenpy:
 
         # Generate a string of variable definitions to attach after characters but before the script
         var_def_str = ''
-        for variable_name, variable_value in raw_variables_dict.iteritems():
+        for variable_name, variable_value in raw_variables_dict.items():
             var_def_str += 'default {} = {}\n'.format(variable_name, variable_value)
 
         # Add variable defs to the document passage if desired
@@ -357,7 +368,9 @@ class TwineToRenpy:
                 passage.string = ''
 
             # Convert passage from ascii to unicode
-            unicode_passage = passage.string.encode('utf-8')
+            # TODO Remove: Converting to unicode no longer necessary since done on file open
+            # unicode_passage = passage.string.encode('utf-8')
+            unicode_passage = passage.string
 
             # A "Twine mode" that adds " to every newline as if all lines are spoken by a Ren'Py narrator
             quotes_passage = ''
@@ -411,7 +424,9 @@ class TwineToRenpy:
             final_menu_groupings_dict = OrderedDict()
             twine_menu_indeces_dict = OrderedDict()
             current_group_index = 0
-            if len(split_passage) > 2:
+            # If NVL mode, convert all Twine connections into menus
+            passage_split_min = 1 if self.get_config_value('nvl_mode') else 2
+            if len(split_passage) > passage_split_min:
                 in_choice_group = False
                 for i, passage_section in enumerate(split_passage):
                     choice_split = passage_section.split(']]')
@@ -445,9 +460,9 @@ class TwineToRenpy:
                                 passage_index_with_whitespace.append(i)
                                 current_group_index += 1
                 twine_menu_indeces = list(set(passage_index_with_whitespace))
-                for choice_index, choice_list in twine_menu_indeces_groupings_dict.iteritems():
+                for choice_index, choice_list in twine_menu_indeces_groupings_dict.items():
                     final_menu_groupings_dict[choice_index] = list(set(choice_list))
-                for choice_index, choice_list in final_menu_groupings_dict.iteritems():
+                for choice_index, choice_list in final_menu_groupings_dict.items():
                     # Based on the choice index groups, we will assign whether the choices are
                     #  first, middle, or end of a group. Or whether they are standalone choices.
                     for i, choice_split_index in enumerate(choice_list):
@@ -467,7 +482,9 @@ class TwineToRenpy:
             if len(split_passage) > 1:
                 # Check if using Twine-like choices for conversion to Ren'Py menus
                 #  by seeing if there are any stored indeces from above.
-                if len(twine_menu_indeces) > 1:
+                # Also, If NVL mode, convert ALL Twine connections into menus
+                twine_menu_min = 0 if self.get_config_value('nvl_mode') else 1
+                if len(twine_menu_indeces) > twine_menu_min:
                     for passage_split_index, passage_section in enumerate(split_passage):
                         # If the current index was one of the twine menu indeces, then process it accordingly
                         if passage_split_index in twine_menu_indeces_dict:
@@ -478,6 +495,25 @@ class TwineToRenpy:
                             if len(passage_section_split) > 1:
                                 passage_rest = passage_section_split[1]
                             choice_text = jump_statement
+
+                            # Check if this is a setter link
+                            setter_link_statement = ''
+                            if len(jump_statement.split('[')) > 1:
+                                # Add setter statement after menu but before jump
+                                # Remove setter statement from the choice text and jump statement
+                                jump_statement, setter_link_split = jump_statement.split('[')
+                                # Remove any extra $'s
+                                setter_link_split = setter_link_split.replace('$', '')
+                                # Replace the first "to" inside the statement only
+                                setter_link_split = '$ ' + setter_link_split.replace(' to ', ' = ', 1)
+                                # Replace Twine boolean phrase with the Ren'Py/Python accepted one
+                                for boolean_phrase, boolean_replace in boolean_replace_dict.items():
+                                    if boolean_phrase in setter_link_split:
+                                        setter_link_split = setter_link_split.replace(boolean_phrase,
+                                                                                      boolean_replace)
+                                setter_link_statement = '\n        {}'.format(setter_link_split)
+
+                            # Check if there is a pipe indicating a named link
                             if len(jump_statement.split('|')) > 1:
                                 choice_text, jump_statement = jump_statement.split('|')
                             # Strip the quotes if it has any since we'll be adding these anyway
@@ -485,20 +521,20 @@ class TwineToRenpy:
 
                             # If this is the first Twine menu index, generate the menu start
                             if twine_menu_indeces_dict[passage_split_index] == 'start':
-                                jump_passage += 'menu:\n    "{}":\n        jump {}\n    '.\
-                                    format(choice_text, self.to_rpy_name(jump_statement))
+                                jump_passage += 'menu:\n    "{}":{}\n        jump {}\n    '.\
+                                    format(choice_text, setter_link_statement, self.to_rpy_name(jump_statement))
                             # If it's the last one, we don't need the trailing newline
                             elif twine_menu_indeces_dict[passage_split_index] == 'end':
-                                jump_passage += '"{}":\n        jump {}{}'.\
-                                    format(choice_text, self.to_rpy_name(jump_statement), passage_rest)
+                                jump_passage += '"{}":{}\n        jump {}{}'.\
+                                    format(choice_text, setter_link_statement, self.to_rpy_name(jump_statement), passage_rest)
                             # If it's standalone, menu and jump
                             elif twine_menu_indeces_dict[passage_split_index] == 'standalone':
-                                jump_passage += 'menu:\n    "{}":\n        jump {}{}'. \
-                                    format(choice_text, self.to_rpy_name(jump_statement), passage_rest)
+                                jump_passage += 'menu:\n    "{}":{}\n        jump {}{}'. \
+                                    format(choice_text, setter_link_statement, self.to_rpy_name(jump_statement), passage_rest)
                             # All others will use the newline
                             else:
-                                jump_passage += '"{}":\n        jump {}\n    '. \
-                                    format(choice_text, self.to_rpy_name(jump_statement))
+                                jump_passage += '"{}":{}\n        jump {}\n    '. \
+                                    format(choice_text, setter_link_statement, self.to_rpy_name(jump_statement))
                         # We don't immediately write the first passage to the string just in case it's actually a menu
                         #  If it isn't a menu though, then we can go ahead and write it
                         elif passage_split_index == 0:
@@ -517,6 +553,25 @@ class TwineToRenpy:
                         else:
                             passage_rest = ''
                         choice_text = jump_statement
+
+                        # Check if this is a setter link
+                        setter_link_statement = ''
+                        if len(jump_statement.split('[')) > 1:
+                            # Add setter statement after menu but before jump
+                            # Remove setter statement from the choice text and jump statement
+                            jump_statement, setter_link_split = jump_statement.split('[')
+                            # Remove any extra $'s
+                            setter_link_split = setter_link_split.replace('$', '')
+                            # Replace the first "to" inside the statement only
+                            setter_link_split = '$ ' + setter_link_split.replace(' to ', ' = ', 1)
+                            # Replace Twine boolean phrase with the Ren'Py/Python accepted one
+                            for boolean_phrase, boolean_replace in boolean_replace_dict.items():
+                                if boolean_phrase in setter_link_split:
+                                    setter_link_split = setter_link_split.replace(boolean_phrase,
+                                                                                  boolean_replace)
+                            setter_link_statement = setter_link_split
+
+                        # Check if there is a pipe indicating a named link
                         if len(jump_statement.split('|')) > 1:
                             choice_text, jump_statement = jump_statement.split('|')
                         # Strip the quotes if it has any since we'll be adding these anyway
@@ -524,11 +579,15 @@ class TwineToRenpy:
 
                         # If we have a pipe, use a menu
                         if '|' in quotes_passage:
-                            jump_passage += 'menu:\n    "{}":\n        jump {}\n    {}'. \
-                                format(choice_text, self.to_rpy_name(jump_statement), passage_rest)
+                            if setter_link_statement != '':
+                                setter_link_statement = '\n        {}\n'.format(setter_link_statement)
+                            jump_passage += 'menu:\n    "{}":\n{}        jump {}\n    {}'. \
+                                format(choice_text, setter_link_statement, self.to_rpy_name(jump_statement), passage_rest)
                         else:
                             # Convert the jump statement to rpy name (which is used as the label)
-                            jump_passage += 'jump ' + self.to_rpy_name(jump_statement) + passage_rest
+                            if setter_link_statement != '':
+                                setter_link_statement = '\n{}\n'.format(setter_link_statement)
+                            jump_passage += setter_link_statement + 'jump ' + self.to_rpy_name(jump_statement) + passage_rest
             else:
                 # If the passage doesn't have any [[ then just assign it to the string
                 jump_passage = split_passage[0]
@@ -539,20 +598,22 @@ class TwineToRenpy:
             # Check if we're setting variables
             if set_phrase in jump_passage:
                 set_passage_split_list = jump_passage.split(set_phrase)
+                set_passage += set_passage_split_list[0]
                 # Start after the first instance of the set phrase
                 for set_passage_split in set_passage_split_list[1:]:
                     # Get the set statement by splitting at next immediate instance of >>
                     set_passage_split_list = set_passage_split.split('>>', 1)
                     # This is our statement
-                    set_passage_statement = set_passage_split_list[0]
+                    # Remove any extra $'s
+                    set_passage_statement = set_passage_split_list[0].replace('$', '')
                     # We only set what's after if it exists
                     set_passage_end = ''
                     if len(set_passage_split_list) > 1:
                         set_passage_end = set_passage_split_list[1]
-                    # Replace the "to" inside the statement only
-                    set_passage_statement = '$ ' + set_passage_statement.replace(' to ', ' = ')
+                    # Replace the first "to" inside the statement only
+                    set_passage_statement = '$ ' + set_passage_statement.replace(' to ', ' = ', 1)
                     # Replace Twine boolean phrase with the Ren'Py/Python accepted one
-                    for boolean_phrase, boolean_replace in boolean_replace_dict.iteritems():
+                    for boolean_phrase, boolean_replace in boolean_replace_dict.items():
                         if boolean_phrase in set_passage_statement:
                             set_passage_statement = set_passage_statement.replace(boolean_phrase, boolean_replace)
                     set_passage += set_passage_statement + set_passage_end
@@ -571,6 +632,7 @@ class TwineToRenpy:
             if initial_if_phrase in set_passage:
                 # If so, let's find the phrases
                 if_passage_split = set_passage.split('<<')
+                # TODO Sometimes it won't add what's before...
                 # The first part of the split won't have conditionals, so add as is
                 if_passage += if_passage_split[0]
                 for passage_split in if_passage_split[1:]:
@@ -582,7 +644,7 @@ class TwineToRenpy:
                         if_result = ''
                         if len(if_phrase_split) > 1:
                             if_result = if_phrase_split[1]
-                        for comparison_phrase, comparison_replace in comparison_phrase_dict.iteritems():
+                        for comparison_phrase, comparison_replace in comparison_phrase_dict.items():
                             if comparison_phrase in if_phrase:
                                 # No break because we could have multiple types of comparison
                                 if_phrase = if_phrase.replace(comparison_phrase, comparison_replace)
@@ -596,7 +658,7 @@ class TwineToRenpy:
                         # Retain original formatting to make it easier to find these
                         if_passage += '<<{}>>{}'.format(if_phrase, if_result)
                 if_passage = if_passage.replace('<</if>>', '')
-                for if_phrase, if_replace in if_phrase_dict.iteritems():
+                for if_phrase, if_replace in if_phrase_dict.items():
                     if_passage = if_passage.replace(if_phrase, if_replace)
             else:
                 # If we don't, just pass the previous passage along
@@ -654,8 +716,9 @@ class TwineToRenpy:
             # Iterate over the list of terms to update
             # Generally we're replacing all the non-recognized characters with safe for Ren'Py ones
             for dict_pair in self.char_replace_list:
-                for og_char, new_char in dict_pair.iteritems():
-                    clean_passage = clean_passage.replace(og_char.encode('utf-8'), new_char.encode('utf-8'))
+                for og_char, new_char in dict_pair.items():
+                    # clean_passage = clean_passage.replace(og_char.encode('utf-8'), new_char.encode('utf-8'))
+                    clean_passage = clean_passage.replace(og_char, new_char)
 
             # The passage label is the passage name since this is used in the jump text
             passage_text = 'label {}:\n    {}\n\n'.format(passage_name, clean_passage)
@@ -666,7 +729,7 @@ class TwineToRenpy:
             # Check if this is a document break or if it's the end of the twine document
             if passage_tags == self.get_config_value('doc_break') or passage_index == len(passage_list) - 1:
                 # If it is, write the rpy passage file
-                passage_file = open(os.path.join(self.data['script_dir'], rpy_file_name), 'w')
+                passage_file = open(os.path.join(self.data['script_dir'], rpy_file_name), 'w', encoding='utf-8')
                 n = passage_file.write(document_passage)
                 passage_file.close()
 

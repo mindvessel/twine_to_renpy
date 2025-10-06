@@ -3,8 +3,10 @@
 
 import os
 import sys
-from PyQt4.QtGui import *
+from PyQt5.QtWidgets import *
 from twine_to_rpy_model import TwineToRenpy
+# This version of the import is for pyinstaller to find the module only
+# from twine_to_rpy.twine_to_rpy_model import TwineToRenpy
 
 
 class TwineToRenpyView(QWidget):
@@ -64,7 +66,13 @@ class TwineToRenpyView(QWidget):
         self.twine_mode_combobox.setCurrentIndex(self.model.get_config_value('twine_mode'))
         settings_layout.addRow(self.twine_mode_label, self.twine_mode_combobox)
 
-        # Document break tag
+        # NVL mode
+        self.nvl_mode_label = QLabel('NVL mode', self)
+        self.nvl_mode_checkbox = QCheckBox(self)
+        self.nvl_mode_checkbox.setChecked(self.model.get_config_value('nvl_mode'))
+        settings_layout.addRow(self.nvl_mode_label, self.nvl_mode_checkbox)
+
+        # Start file name
         self.start_name_label = QLabel('Start file name', self)
         self.start_name_le = QLineEdit(self.model.get_config_value('start_name'), self)
         settings_layout.addRow(self.start_name_label, self.start_name_le)
@@ -196,7 +204,7 @@ class TwineToRenpyView(QWidget):
 
         # Create the term replace UI
         for i, char_dict in enumerate(self.model.custom_char_replace_list):
-            for og_char, new_char in char_dict.iteritems():
+            for og_char, new_char in char_dict.items():
                 # Create widgets
                 og_char_le = QLineEdit(og_char, self)
                 new_char_le = QLineEdit(new_char, self)
@@ -287,7 +295,8 @@ class TwineToRenpyView(QWidget):
         Args:
             lineedit: (lineedit) The lineedit displaying the filepath
         """
-        filepath = QFileDialog().getOpenFileName(self, 'Select file', '/', 'HTML files (*.html)')
+        # See here: https://stackoverflow.com/questions/43509220/qtwidgets-qfiledialog-getopenfilename-returns-a-tuple
+        filepath, _filter = QFileDialog.getOpenFileName(self, 'Select file', '/', 'HTML files (*.html)')
         if filepath:
             lineedit.setText(filepath)
 
@@ -545,7 +554,7 @@ class TwineToRenpyView(QWidget):
 
         # Remake the replace terms UI
         for i, char_dict in enumerate(self.model.custom_char_replace_list):
-            for og_char, new_char in char_dict.iteritems():
+            for og_char, new_char in char_dict.items():
                 # Create widgets
                 og_char_le = QLineEdit(og_char, self)
                 new_char_le = QLineEdit(new_char, self)
@@ -644,6 +653,8 @@ class TwineToRenpyView(QWidget):
         # Conversion settings
         self.twine_mode_combobox.currentIndexChanged.connect(
             lambda: self.update_cb_model_data('twine_mode', self.twine_mode_combobox))
+        self.nvl_mode_checkbox.stateChanged.connect(
+            lambda: self.update_checkbox_model_data('nvl_mode', self.nvl_mode_checkbox))
         self.start_name_le.textChanged.connect(lambda: self.update_le_model_data('start_name', self.start_name_le))
         self.doc_break_le.textChanged.connect(lambda: self.update_le_model_data('doc_break', self.doc_break_le))
         self.number_first_combobox.currentIndexChanged.connect(self.set_number_mode_state)
